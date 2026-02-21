@@ -1,52 +1,99 @@
 import pandas as pd
-import numpy as np
+import os
+from typing import Optional
 from custom_exceptions import DataNotLoadedError
+
 
 class DataLoader:
 
-  def __init__(
-      self,
-      data_path: str,
-      index_col: str
-  ):
-    self.data_path = data_path
-    self.index_col = index_col
-    self.data = None
+    def __init__(self, data_path: str, index_col: str):
+        self.data_path = data_path
+        self.index_col = index_col
+        self.data: Optional[pd.DataFrame] = None
 
-  def load_data(self, clean_data=True):
+    def load_data(self, clean_data: bool = True) -> None:
+        """
+        Loads CSV data, sets the index column, converts it to datetime,
+        optionally cleans missing values, and validates dataset integrity.
+        """
 
-    try:
-      # Data loading
-      self.data = pd.read_csv(self.data_path)
-      self.data = self.data.set_index(self.index_col)
-      self.data.index = pd.to_datetime(self.data.index, dayfirst=True)
-      # Data cleaning
-      if clean_data:
-        self.data.ffill(axis=0, inplace=True)
+        # Validate file path
+        if not os.path.exists(self.data_path):
+            raise FileNotFoundError(f"File not found at path: {self.data_path}")
 
-    except Exception as e:
-      if isinstance(e, FileNotFoundError):
-        raise FileNotFoundError("Given File Path doesn't exist!")
-      if isinstance(e, KeyError):
-        raise KeyError(f"Given index_col='{self.index_col}' doesn't exist in the dataset columns!")
+        try:
+            self.data = pd.read_csv(self.data_path)
 
-      raise e
+        except pd.errors.EmptyDataError:
+            raise ValueError("The provided CSV file is empty.")
 
-  def print_missing_values_count(self):
+        except pd.errors.ParserError:
+            raise ValueError("Error parsing CSV file. Please check file format.")
 
-    if self.data is None:
-      raise DataNotLoadedError(self.data)
+        # Validate index column existence
+        if self.index_col not in self.data.columns:
+            raise KeyError(
+                f"Index column '{self.index_col}' does not exist in dataset columns."
+            )
 
-    for col in self.data.iloc(1):
-      missing_val = col[col.isna()==True]
-      print(f"{col.name}: {len(missing_val)}")
+        # Set index
+        self.data.set_index(self.index_col, inplace=True)
 
-  def generate_daily_returns(self):
-    if self.data is None:
-      raise DataNotLoadedError(self.data)
+        # Convert index to datetime
+        try:
+            self.data.index = pd.to_datetime(self.data.index, dayfirst=True)
+        except Exception:
+            raise ValueError(
+                f"Index column '{self.index_col}' cannot be converted to datetime."
+            )
 
-    daily_returns = self.data.copy()
-    daily_returns = self.data.pct_change()
-    daily_returns = daily_returns[1:]
+        # Sort by datetime index
+        self.data.sort_index(inplace=True)
 
-    return daily_returns
+        # Optional forward fill cleaning
+        if clean_data:
+            self.data.ffill(inplace=True)
+
+        # Validate dataset after processing
+        if self.data.empty:
+            raise ValueError("Dataset is empty after loading and cleaning.")
+
+        # Check duplicate index values
+        if self.data.index.duplicated().any():
+            raise ValueError("Duplicate values found in index column.")
+
+    def print_missing_values_count(self) -> None:
+        """
+        Prints missing value count for each column.
+        """
+
+        if self.data is None:
+            raise DataNotLoadedError("Data must be loaded before checking missing values.")
+
+        missing_counts = self.data.isna().sum()
+
+        for col, count in missing_counts.items():
+            print(f"{col}: {count}")
+
+    def generate_daily_returns(self) -> pd.DataFrame:
+        """
+        Generates daily percentage returns using numeric columns only.
+        """
+
+        if self.data is None:
+            raise DataNotLoadedError("Data must be loaded before generating returns.")
+
+        if self.data.empty:
+            raise ValueError("Cannot calculate returns on empty dataset.")
+
+        numeric_data = self.data.select_dtypes(include=["number"])
+
+        if numeric_data.empty:
+            raise ValueError("No numeric columns available to calculate returns.")
+
+        daily_returns = numeric_data.pct_change().dropna()
+
+        if daily_returns.empty:
+            raise ValueError("Daily returns calculation resulted in an empty dataset.")
+
+        return daily_returns

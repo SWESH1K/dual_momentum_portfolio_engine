@@ -1,96 +1,105 @@
 import os
+import json
+from typing import Dict, Any
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+
 load_dotenv()
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-def get_ai_analysis(strategy_A_score, strategy_B_score):
-  prompt = f"""
-  You are a quantitative investment analyst.
+class AIAnalysisError(Exception):
+    """Raised when AI analysis fails."""
+    pass
 
-  You will receive JSON input containing performance metrics of two investment strategies.
-  The JSON will include (but may not be limited to):
 
-  - total_return
-  - cagr
-  - max_drawdown
-  - volatility
-  - sharpe_ratio (if available)
-  - time_period
-  - any additional risk metrics
+def get_ai_analysis(
+    strategy_A_score: Dict[str, Any],
+    strategy_B_score: Dict[str, Any],
+    model: str = "gemini-2.5-flash-lite",
+    stream: bool = False
+) -> str:
+    """
+    Generates structured AI comparison of two strategies.
+    Returns analysis as a string.
+    """
 
-  Your task is to perform a structured professional comparison of the two strategies.
+    api_key = os.getenv("GEMINI_API_KEY")
 
-  Please follow these steps strictly:
+    if not api_key:
+        raise EnvironmentError("GEMINI_API_KEY not found in environment variables.")
 
-  1. Compare Overall Performance
-    - Compare total return and CAGR.
-    - Identify which strategy generated higher compounded growth.
-    - Comment on consistency if implied by the data.
+    if not isinstance(strategy_A_score, dict):
+        raise TypeError("strategy_A_score must be a dictionary.")
 
-  2. Compare Risk Characteristics
-    - Compare volatility.
-    - Compare maximum drawdown.
-    - Identify which strategy is riskier and in what sense.
+    if not isinstance(strategy_B_score, dict):
+        raise TypeError("strategy_B_score must be a dictionary.")
 
-  3. Discuss Risk-Return Trade-off
-    - Evaluate whether higher returns are justified by higher risk.
-    - If Sharpe ratio is available, use it.
-    - If not available, infer trade-off qualitatively from return vs volatility.
+    try:
+        strategy_A_json = json.dumps(strategy_A_score, indent=2)
+        strategy_B_json = json.dumps(strategy_B_score, indent=2)
+    except Exception as e:
+        raise ValueError("Failed to serialize strategy scores to JSON.") from e
 
-  4. When Each Strategy May Outperform
-    - Describe market environments (bullish, bearish, high volatility, trending, sideways).
-    - Suggest conditions under which one strategy is structurally favored.
+    prompt = f"""
+    You are a quantitative investment analyst.
 
-  5. Suggest One Concrete Improvement Idea
-      - Suggest one realistic quantitative improvement.
-      - Example categories: risk management, dynamic allocation, longer lookback, volatility scaling, drawdown control, diversification.
-      - The suggestion must be actionable and technically meaningful.
+    You will receive JSON input containing performance metrics of two investment strategies.
 
-    Formatting Rules:
-    - Use clear section headings.
-    - Be analytical, not promotional.
-    - Avoid generic statements.
-    - Base reasoning strictly on provided metrics.
-    - If metrics are missing, state reasonable assumptions.
-    - Do not fabricate data.
+    Your task is to perform a structured professional comparison.
 
-    Tone:
-    Professional, analytical, concise but insightful.
+    Follow these sections strictly:
 
-    Now analyze the following JSON:
+    1. Overall Performance
+    2. Risk Characteristics
+    3. Risk-Return Trade-off
+    4. Market Regime Suitability
+    5. One Concrete Improvement Suggestion
 
-    Strategy A : {strategy_A_score}
-    Strategy B : {strategy_B_score}
-  """
+    Formatting:
+    - Use section headings
+    - Be analytical and concise
+    - Do not fabricate data
+    - Base reasoning strictly on provided metrics
 
-  client = genai.Client(
-        api_key=GEMINI_API_KEY,
-    )
+    Strategy A:
+    {strategy_A_json}
 
-  model = "gemini-2.5-flash-lite"
-  contents = [
-      types.Content(
-          role="user",
-          parts=[
-              types.Part.from_text(text=prompt),
-          ],
-      ),
-  ]
-  tools = [
-      types.Tool(googleSearch=types.GoogleSearch(
-      )),
-  ]
-  generate_content_config = types.GenerateContentConfig(
-      tools=tools,
-  )
+    Strategy B:
+    {strategy_B_json}
+    """
 
-  for chunk in client.models.generate_content_stream(
-      model=model,
-      contents=contents,
-      config=generate_content_config,
-  ):
-    print(chunk.text, end="")
+    try:
+        client = genai.Client(api_key=api_key)
+
+        contents = [
+            types.Content(
+                role="user",
+                parts=[types.Part.from_text(text=prompt)],
+            ),
+        ]
+
+        response_text = ""
+
+        if stream:
+            for chunk in client.models.generate_content_stream(
+                model=model,
+                contents=contents,
+            ):
+                if chunk.text:
+                    response_text += chunk.text
+        else:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents,
+            )
+            response_text = response.text
+
+        if not response_text:
+            raise AIAnalysisError("Empty response received from AI model.")
+
+        return response_text.strip()
+
+    except Exception as e:
+        raise AIAnalysisError("AI analysis request failed.") from e
