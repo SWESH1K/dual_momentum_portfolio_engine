@@ -22,7 +22,7 @@ This project implements a momentum-based portfolio analysis platform that:
 
 1. **Clone or download the project** to your local directory:
    ```bash
-   cd /path/to/NB_Assignment
+   cd /path/to/project
    ```
 
 2. **Initialize and sync dependencies with uv**:
