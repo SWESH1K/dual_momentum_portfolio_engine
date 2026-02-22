@@ -70,7 +70,7 @@ The dashboard will be available at `http://127.0.0.1:8050/` in your browser.
 ## Assumptions Made
 
 1. **Forward-fill missing values**: If an asset's value is missing on day t, the value from day t-1 is used.
-   - Mathematically: if `assetX_t == null` then `assetX_t = assetX_{t-1}`
+   - Mathematically: if `assetX[t] == null` then `assetX[t] = assetX[t-1]`
 
 2. **Missing complete dates are non-trading dates**: If all assets are missing data for a date, that date is excluded from analysis.
 
@@ -149,7 +149,7 @@ Responsible for loading CSV data, cleaning, and preparing it for analysis.
 - Filters for numeric columns only (ignores non-numeric data)
 - Removes NaN values from calculations
 - Returns DataFrame with same structure as input data but with return values
-- Formula: $\text{return}_t = \frac{\text{price}_t}{\text{price}_{t-1}} - 1$
+- Formula: $\text{return}_{t} = \frac{\text{price}_{t}}{\text{price}_{t-1}} - 1$
 - Raises: `DataNotLoadedError` or `ValueError` if data unavailable or empty
 
 ---
@@ -167,7 +167,7 @@ Implements momentum-based portfolio construction and performance calculations.
 
 **Method: `generate_momentum_score(num_days: int) -> pd.DataFrame`**
 - Calculates momentum as percentage change over `num_days` periods
-- Momentum Score = $\text{pct\_change(periods=num\_days)}$
+- Momentum Score = percentage change over specified period
 - Example: 30-day momentum shows percentage change over last 30 days
 - Removes NaN values resulting from the lookback period
 - Raises: `ValueError` if `num_days` is invalid or results in empty DataFrame
@@ -189,13 +189,13 @@ Implements momentum-based portfolio construction and performance calculations.
   2. For each trading day, calculates mean of returns from selected assets
   3. Uses 50% weight for each of the top 2 assets
   4. Handles transitions at month boundaries (rebalancing)
-- Formula: $\text{Portfolio Return}_t = \frac{\text{Return}_{\text{Asset1}, t} + \text{Return}_{\text{Asset2}, t}}{2}$
+- Formula: $\text{Portfolio Return}_{t} = \frac{\text{Return}_{\text{Asset1},t} + \text{Return}_{\text{Asset2},t}}{2}$
 - Fills any gaps with 0 when no valid assets available for a period
 - Returns: `pd.Series` with portfolio daily returns
 
 **Method: `compute_cumulative_value(portfolio_daily_returns: pd.Series, initial_amount: float) -> pd.Series`**
 - Converts daily returns into cumulative portfolio value
-- Formula: $\text{Value}_t = (1 + \text{return}_1) \times (1 + \text{return}_2) \times ... \times (1 + \text{return}_t) \times \text{initial\_amount}$
+- Formula: $\text{Value}_{t} = (1 + \text{return}_{1}) \times (1 + \text{return}_{2}) \times \cdots \times (1 + \text{return}_{t}) \times \text{initial amount}$
 - Assumes compounding of returns (compound growth model)
 - Default initial investment: $1000
 - Returns: `pd.Series` representing portfolio value over time
@@ -233,7 +233,7 @@ Calculates financial performance metrics for a portfolio.
 **Method: `cagr(trading_days: int = 252) -> float`**
 - Computes Compound Annual Growth Rate
 - Annualizes returns by accounting for time period length
-- Formula: $\text{CAGR} = \left(\frac{\text{End Value}}{\text{Start Value}}\right)^{\frac{1}{\text{years}}} - 1$
+- Formula: $\text{CAGR} = \left(\frac{\text{End Value}}{\text{Start Value}}\right)^{1/\text{years}} - 1$
 - Where `years = num_days / trading_days` (252 trading days per year)
 - Example: 10% total return over 2 years = ~4.88% CAGR
 - Returns: `float` representing annualized growth rate
@@ -243,9 +243,9 @@ Calculates financial performance metrics for a portfolio.
 - Calculates maximum loss from peak value
 - Process:
   1. Computes running maximum (peak) of portfolio value
-  2. Calculates drawdown at each point: $\text{Drawdown}_t = \frac{\text{Value}_t - \text{Peak}_t}{\text{Peak}_t}$
+  2. Calculates drawdown at each point: $\text{Drawdown}_{t} = \frac{\text{Value}_{t} - \text{Peak}_{t}}{\text{Peak}_{t}}$
   3. Returns minimum (most negative) drawdown
-- Formula: $\text{Max Drawdown} = \min\left(\frac{\text{Value}_t - \text{Peak}_t}{\text{Peak}_t}\right)$
+- Formula: $\text{Max Drawdown} = \min\left(\frac{\text{Value}_{t} - \text{Peak}_{t}}{\text{Peak}_{t}}\right)$
 - Example: -0.20 means portfolio fell 20% from its highest point
 - Returns: `float` (negative value representing loss)
 - Usage: Risk metric - smaller (less negative) is better
@@ -254,7 +254,7 @@ Calculates financial performance metrics for a portfolio.
 - Calculates annualized standard deviation of returns
 - Process:
   1. Computes standard deviation of daily returns (using sample std with ddof=1)
-  2. Annualizes by multiplying by $\sqrt{\text{trading\_days}}$
+  2. Annualizes by multiplying by $\sqrt{n}$ where n is the number of trading days per year
 - Formula: $\text{Volatility} = \text{std(daily returns)} \times \sqrt{252}$
 - High volatility indicates unpredictable/risky returns
 - Returns: `float` representing annualized volatility (as decimal)
