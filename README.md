@@ -27,7 +27,6 @@ This project implements a momentum-based portfolio analysis platform that:
 
 2. **Initialize and sync dependencies with uv**:
    ```bash
-   uv init
    uv sync
    ```
 
